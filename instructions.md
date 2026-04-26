@@ -51,42 +51,133 @@ You only write to archive/. You never modify inbox.
   the past 7 days.
 
 - "state of ralph" — update archive/derived/state-of-ralph.md.
+- "publish" — copy `inbox/<current-month>.md` to Google Drive.
 
-- "publish" — sync inbox/<current-month>.md to a single Google Drive
-  folder named "2026-lifevault-published" at Drive root.
+  Purpose:
+  Publish the current month inbox file to Google Drive with minimum tokens, no git interaction, and local Ubuntu-verifiable checks.
 
-  Procedure (no deviations, no questions):
+  Operating assumption:
+  Local shell examples are Ubuntu bash only. They are for local verification of filename, path, existence, byte count, and content. Google Drive actions must be done through the available Drive tool, not through local shell, unless an actual Drive CLI is installed and configured.
 
-  1. List items at Drive root where:
-       - mimeType == 'application/vnd.google-apps.folder'
-       - name == '2026-lifevault-published'
-       - trashed == false
-       - parents contains 'root'
-     Sort by createdTime ascending.
-     
-     - If 0 results: create the folder at root. Use that ID.
-     - If 1 result: use that ID.
-     - If 2+ results: use the OLDEST one (first in sorted list).
-       Do not delete the others. Do not stop. Just use the oldest.
-       Report at the end: "Note: N duplicate folders detected,
-       used oldest. Clean up manually."
+  Variables:
 
-  2. List files in the chosen folder where:
-       - name == '<current-month>.md'
-       - trashed == false
-     Delete every match. Verify each delete succeeded.
+  Human:
+  Current month filename is `YYYY-MM.md`.
 
-  3. Read inbox/<current-month>.md from local repo.
-     Create a new file in the chosen folder with that name and content.
+  Ubuntu:
+  `FILE_NAME="$(date +%Y-%m).md"`
 
-  4. Reply with exactly:
-       "Folder: <name> (used existing | created new)"
-       "Deleted: <N> existing copies"
-       "Created: <filename> (<bytes> bytes)"
+  Human:
+  Current inbox file is `inbox/YYYY-MM.md`.
 
-  Forbidden: creating a second folder when one exists, asking
-  questions, paginating beyond one call, running git, reading git
-  history, modifying inbox files.
+  Ubuntu:
+  `LOCAL_FILE="inbox/$FILE_NAME"`
+
+  Human:
+  Target Drive folder is `2026-lifevault-published`.
+
+  Ubuntu:
+  `PUBLISH_FOLDER="2026-lifevault-published"`
+
+  Procedure:
+
+  1. Human:
+     Determine the current month filename.
+
+     Ubuntu:
+     `FILE_NAME="$(date +%Y-%m).md"`
+
+  2. Human:
+     Determine the local inbox file path.
+
+     Ubuntu:
+     `LOCAL_FILE="inbox/$FILE_NAME"`
+
+  3. Human:
+     Confirm the local inbox file exists. If missing, stop and report the missing path.
+
+     Ubuntu:
+     `test -f "$LOCAL_FILE" && echo "exists: $LOCAL_FILE" || echo "missing: $LOCAL_FILE"`
+
+  4. Human:
+     Count the local file size in bytes.
+
+     Ubuntu:
+     `BYTES="$(wc -c < "$LOCAL_FILE" | tr -d ' ')" && echo "$BYTES"`
+
+  5. Human:
+     Optionally preview the first few lines without modifying the file.
+
+     Ubuntu:
+     `sed -n '1,20p' "$LOCAL_FILE"`
+
+  6. Human:
+     In Google Drive root, find folders matching all of these:
+     - name is `2026-lifevault-published`
+     - mimeType is Google Drive folder
+     - trashed is false
+     - parent is root
+
+     Drive action:
+     Use the Drive tool to list matching root folders.
+
+  7. Human:
+     Choose the Drive folder:
+     - If zero folders exist, create `2026-lifevault-published` at Drive root.
+     - If one folder exists, use it.
+     - If multiple folders exist, use the oldest by createdTime.
+     - Do not delete duplicate folders.
+     - Do not create another folder when one already exists.
+
+     Drive action:
+     Set chosen folder ID internally.
+
+  8. Human:
+     In the chosen Drive folder, find all non-trashed files named `YYYY-MM.md`.
+
+     Drive action:
+     List files in chosen folder where name equals the current month filename.
+
+  9. Human:
+     Delete every matching Drive file. Verify each delete succeeded.
+
+     Drive action:
+     Delete all matching files and count deletions.
+
+  10. Human:
+      Create one new Drive file in the chosen folder:
+      - file name: current month filename
+      - content: exact contents of local file
+
+      Ubuntu local verification:
+      `cat "$LOCAL_FILE"`
+
+      Drive action:
+      Create the Drive file using the exact local file content.
+
+  11. Human:
+      Reply with exactly these lines:
+
+      Folder: 2026-lifevault-published (used existing | created new)
+      Deleted: <N> existing copies
+      Created: <YYYY-MM.md> (<bytes> bytes)
+
+  12. Human:
+      If duplicate folders were detected, append exactly this line:
+
+      Note: <N> duplicate folders detected, used oldest. Clean up manually.
+
+  Forbidden:
+  - Do not run git.
+  - Do not read git logs.
+  - Do not run git status.
+  - Do not run git diff.
+  - Do not run git add.
+  - Do not run git commit.
+  - Do not run git push.
+  - Do not modify anything in inbox/.
+  - Do not create another Drive folder if one already exists.
+  - Do not ask questions.
 
 ## Context
 
