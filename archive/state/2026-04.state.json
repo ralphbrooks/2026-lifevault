@@ -1,9 +1,0 @@
-{
-  "source_file": "inbox/2026-04.md",
-  "source_size_bytes": null,
-  "source_sha256": null,
-  "processed_entry_count": 5,
-  "last_processed_at": "2026-04-25T21:27:00",
-  "raw_file": "archive/raw/2026/2026-04.jsonl",
-  "notes": "Bash mount may be stale; size/hash skipped. Authoritative source is Claude file Read tool content. One entry (2020-04-21) had non-standard date format and ':' separator and was preserved with a note field."
-}

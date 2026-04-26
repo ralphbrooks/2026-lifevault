@@ -80,13 +80,14 @@ Wrote archive/derived/manifest.md.
 Wrote root aliases: manifest.md, wins.md, state-of-ralph.md, weekly-current.md.
 
 === publish: google drive ===
-Publishing to Google Drive folder: 2026-lifevault-published.
+Resolving canonical Google Drive folder: 2026-lifevault-published.
+Folder resolution: <used existing | created new>.
 Published raw/YYYY/YYYY-MM.jsonl.
 Published derived files.
 Published root aliases.
 
 === publish: complete ===
-Folder: 2026-lifevault-published
+Folder: 2026-lifevault-published (<used existing | created new>)
 Published raw: raw/YYYY/YYYY-MM.jsonl
 Published derived: wins.md, state-of-ralph.md, weekly/YYYY-WXX.md, manifest.md
 Published root aliases: manifest.md, wins.md, state-of-ralph.md, weekly-current.md
@@ -180,15 +181,45 @@ Claude's Google Drive connector may later be used in chat to read the published 
 
 If Claude cannot later find the files through the Google Drive connector, the issue is Drive connector access/indexing, not local processing.
 
-## Google Drive publish folder
+## Canonical Google Drive folder rule
 
-The Drive publish folder is:
+The canonical working-memory folder is:
 
 ```text
 2026-lifevault-published
 ```
 
-It lives at Google Drive root.
+Before publishing, Claude must search for existing folders named exactly:
+
+```text
+2026-lifevault-published
+```
+
+Folder resolution rules:
+
+1. If exactly one matching folder is found:
+   - use that folder
+   - do not create another folder
+   - report `Folder: 2026-lifevault-published (used existing)`
+
+2. If more than one matching folder is found:
+   - stop
+   - report that duplicate folders exist
+   - report folder names/URLs/IDs if available
+   - do not publish
+   - do not create another folder
+   - ask Ralph to delete or rename duplicates
+
+3. If zero matching folders are found:
+   - create `2026-lifevault-published` at Drive root
+   - use that newly created folder
+   - report `Folder: 2026-lifevault-published (created new)`
+
+Never create a new `2026-lifevault-published` folder when any same-name candidate already exists.
+
+Duplicate folders are dangerous because Claude web may retrieve the wrong working-memory folder.
+
+## Google Drive publish layout
 
 Published Drive layout:
 
@@ -373,7 +404,7 @@ This intentionally favors correctness over incremental byte-offset optimization.
 
 - `"manifest"` — update `archive/derived/manifest.md` and root `manifest.md`.
 
-- `"publish"` — process the current inbox with Claude file tools, validate completeness, regenerate working-memory files, create root aliases, and publish the processed archive and memory files to Google Drive using Claude's Google Drive connector/tool.
+- `"publish"` — process the current inbox with Claude file tools, validate completeness, regenerate working-memory files, create root aliases, resolve the canonical Google Drive folder, and publish the processed archive and memory files to Google Drive using Claude's Google Drive connector/tool.
 
 ---
 
@@ -763,7 +794,8 @@ Do not use git.
   - root `weekly-current.md`
 - Publish only after processed JSONL exists and validates.
 - Always overwrite published files.
-- Create the Drive publish folder/subfolders if missing.
+- Resolve canonical Drive folder before publishing.
+- Create the Drive publish folder/subfolders only if missing and no duplicate same-name folder exists.
 - Do not upload `inbox/YYYY-MM.md`.
 
 ## Claude Specific
@@ -780,6 +812,7 @@ For this command:
 - Do not run git.
 - Do not modify `inbox/`.
 - If Google Drive publishing fails, stop and report the exact failure.
+- If duplicate `2026-lifevault-published` folders are found, stop and ask Ralph to resolve duplicates.
 
 ## Procedure
 
@@ -931,7 +964,34 @@ Wrote archive/derived/manifest.md.
 Wrote root aliases: manifest.md, wins.md, state-of-ralph.md, weekly-current.md.
 ```
 
-### 7. Publish to Google Drive with connector/tool.
+### 7. Resolve canonical Google Drive folder.
+
+Human:
+Find the correct working-memory folder and prevent duplicates.
+
+Claude Specific:
+Use Claude's Google Drive connector/tool to search Drive for folders named exactly:
+
+```text
+2026-lifevault-published
+```
+
+Apply the canonical Drive folder rule:
+
+- zero matches: create the folder at Drive root
+- one match: use that folder
+- two or more matches: stop and report duplicates; do not publish
+
+Progress log:
+
+```text
+=== publish: resolve drive folder ===
+Searched for folder: 2026-lifevault-published.
+Folder matches found: <N>.
+Folder resolution: <created new | used existing | stopped duplicate folders>.
+```
+
+### 8. Publish to Google Drive with connector/tool.
 
 Human:
 Publish generated files to Google Drive.
@@ -944,12 +1004,6 @@ Drive folder:
 ```text
 2026-lifevault-published
 ```
-
-If the folder does not exist at Drive root, create it.
-
-If the folder exists, use it.
-
-If multiple folders exist with this exact name, use the first/oldest visible folder and do not delete duplicates.
 
 Create subfolders if missing:
 
@@ -1024,7 +1078,7 @@ Published weekly-current.md.
 Published README.md if present.
 ```
 
-### 8. Final reply.
+### 9. Final reply.
 
 Claude Specific:
 Reply with the final publish result.
@@ -1033,7 +1087,7 @@ Expected format:
 
 ```text
 === publish: complete ===
-Folder: 2026-lifevault-published
+Folder: 2026-lifevault-published (<used existing | created new>)
 Published raw: raw/YYYY/YYYY-MM.jsonl
 Published derived: wins.md, state-of-ralph.md, weekly/YYYY-WXX.md, manifest.md
 Published root aliases: manifest.md, wins.md, state-of-ralph.md, weekly-current.md
