@@ -16,37 +16,52 @@ Claude never reads git logs.
 
 Claude never runs git commands.
 
+## Current important Cowork rule
+
+Claude Cowork may have a stale bash filesystem mount.
+
+Therefore:
+
+- Claude file tools are the source of truth for reading and writing local project files.
+- Bash is not the source of truth for local project files.
+- Bash is used only for rclone publishing to Google Drive and optional Drive verification.
+- Do not use bash `cat`, `wc`, `tail`, or shell file reads of `inbox/` to decide what the inbox contains.
+- If Claude's file Read tool and bash disagree, trust Claude's file Read tool for local project content.
+
 ## Goal
 
 The workflow is:
 
 1. Ralph edits logs on PC in `inbox/YYYY-MM.md`.
 2. Ralph may commit/push those edits to git himself.
-3. Ralph runs `"publish"`.
-4. Claude processes only new log content from the current inbox.
-5. Claude updates local processed archive files under `archive/`.
-6. Claude regenerates working-memory summaries under `archive/derived/`.
-7. Claude publishes the processed archive and working-memory files to Google Drive using Ubuntu bash + rclone.
-8. Later, Ralph can ask Claude to reference Google Drive and answer questions such as:
+3. Ralph runs `"publish"` in Claude Cowork.
+4. Claude reads the current inbox using Claude file tools, not bash.
+5. Claude processes the current inbox into structured JSONL.
+6. Claude regenerates working-memory summaries.
+7. Claude writes/updates local archive and derived memory files.
+8. Claude publishes the processed archive and working-memory files to Google Drive using bash + rclone.
+9. Later, Ralph can ask Claude to reference Google Drive and answer broad questions such as:
    - "Tell me my wins."
-   - "What has changed in my state?"
-   - "What happened this week?"
+   - "Where am I on Generator 8?"
+   - "Where am I relative to divorce?"
+   - "What changed recently?"
    - "What are my open loops?"
+   - "What should I focus on next?"
 
 ## Core principle
 
 AI performs semantic interpretation.
 
-Script commands perform mechanical verification.
+Script/tool checks perform mechanical verification.
 
 Claude should use AI judgment for converting human-language log text into structured JSONL and summaries.
 
-Claude should use Ubuntu/rclone/jq commands to verify:
-- files exist
-- JSONL is valid
+Claude should use deterministic checks to verify:
+
 - every timestamped inbox entry was processed
-- uploads completed
-- expected Drive files exist
+- JSONL is valid
+- expected local output files exist
+- expected Drive files were uploaded
 
 ## Ownership model
 
@@ -72,6 +87,13 @@ Claude writes only to:
 - `archive/derived/weekly/YYYY-WXX.md`
 - `archive/derived/manifest.md`
 
+Claude may also create/update these root-level published-memory aliases for Drive retrieval:
+
+- `manifest.md`
+- `wins.md`
+- `state-of-ralph.md`
+- `weekly-current.md`
+
 Claude never modifies files in `inbox/`.
 
 Claude never modifies git state.
@@ -96,46 +118,37 @@ Claude must not use git for:
 
 If Claude thinks it needs git, it does not.
 
-Claude uses only local files and `archive/state/*.state.json` for processing state.
+Claude uses local project files and `archive/state/*.state.json` for processing metadata.
 
 ## Google Drive working-memory model
 
 Google Drive is Claude's published working memory.
 
-Publishing is done with Ubuntu bash and `rclone`.
+Publishing to Google Drive is done with bash and `rclone`.
 
-For the `"publish"` command, Ubuntu/rclone is the source of truth.
+For the `"publish"` command:
 
-Claude must use the same command-line path Ralph can verify.
-
-For `"publish"`, Claude must not use Claude's Google Drive tool.
+- Use Claude file tools for local file reading/writing.
+- Use bash/rclone only for Google Drive upload and Drive verification.
+- Do not use Claude's Google Drive tool for publishing.
 
 Claude's Google Drive connector may later be used in chat to read the published files after they have been uploaded by rclone.
 
 If Claude cannot later find the files through the Google Drive connector, the issue is Drive connector access/indexing, not the local publish process.
 
-## Required local setup
+## Required local setup for publishing
 
 The local system must have:
 
-- Ubuntu bash
-- `jq`
-- current `rclone`
+- `rclone`
 - an rclone Google Drive remote named `gdrive`
 
-One-time setup check:
+Bash setup check, used only for rclone:
 
 ```bash
 rclone version
-rclone help lsjson
 rclone lsd gdrive: >/dev/null
 echo "rclone gdrive remote works"
-```
-
-If `rclone help lsjson` fails, upgrade rclone:
-
-```bash
-curl https://rclone.org/install.sh | sudo bash
 ```
 
 ## Google Drive publish folder
@@ -152,7 +165,11 @@ Published Drive layout:
 
 ```text
 2026-lifevault-published/
+  README.md
   manifest.md
+  wins.md
+  state-of-ralph.md
+  weekly-current.md
   raw/
     YYYY/
       YYYY-MM.jsonl
@@ -162,6 +179,10 @@ Published Drive layout:
     weekly/
       YYYY-WXX.md
 ```
+
+Root-level files are aliases for easier conversational retrieval.
+
+Canonical generated files live under `archive/` locally and under `derived/` / `raw/` in Drive.
 
 ## Hard rules
 
@@ -184,15 +205,17 @@ Published Drive layout:
 3. Never publish raw `inbox/` files unless Ralph explicitly asks for raw inbox backup.
 
 4. Publishing means:
-   - incrementally process the current inbox into `archive/raw/YYYY/YYYY-MM.jsonl`
+   - read the current inbox with Claude file tools
+   - process the current inbox into `archive/raw/YYYY/YYYY-MM.jsonl`
    - regenerate working-memory files under `archive/derived/`
-   - publish the processed archive and derived memory files to Google Drive
+   - create/update root-level retrieval aliases
+   - publish the processed archive and memory files to Google Drive using rclone
 
-5. Claude writes only inside `archive/`.
+5. Claude writes only inside `archive/` plus root-level memory alias files.
 
 6. For `"publish"`, do not use Claude's Google Drive tool.
 
-7. For `"publish"`, use Ubuntu bash and rclone only.
+7. For `"publish"`, use bash/rclone only after local files have been generated with Claude file tools.
 
 8. Do not invent helper functions.
 
@@ -236,7 +259,7 @@ Parsing rules:
 - Do not combine multiple matching inbox lines into one row.
 - Do not skip matching inbox lines.
 - AI may interpret the body semantically, but it must preserve the original meaning.
-- AI may add normalized fields or signals when useful, but the raw body should remain available.
+- AI may add normalized fields or signals when useful, but the raw body must remain available.
 
 ## Mechanical completeness rule
 
@@ -244,23 +267,19 @@ Every timestamped inbox entry must appear as exactly one JSONL row.
 
 This is a mechanical validation rule, not a semantic rule.
 
-Claude uses AI for meaning, but must use row-count validation to ensure it did not skip entries.
+Claude uses AI for meaning, but must verify it did not skip entries.
 
 ---
 
 # Processing state
 
-Claude maintains local processing checkpoints in:
+Claude maintains local processing metadata in:
 
 ```text
 archive/state/YYYY-MM.state.json
 ```
 
 This file is owned by Claude.
-
-Purpose:
-
-Avoid reprocessing the full monthly inbox every time.
 
 State file shape:
 
@@ -269,49 +288,44 @@ State file shape:
   "source_file": "inbox/YYYY-MM.md",
   "source_size_bytes": 0,
   "source_sha256": "",
-  "processed_through_byte": 0,
+  "processed_entry_count": 0,
   "last_processed_at": "YYYY-MM-DDTHH:MM:SS",
   "raw_file": "archive/raw/YYYY/YYYY-MM.jsonl"
 }
 ```
 
-Rules:
+Important:
 
-1. `inbox/YYYY-MM.md` is append-only.
+- Because Cowork bash can be stale, do not use bash byte offsets as the authority for the inbox.
+- State is metadata, not an authority that overrides the current file-tool read.
+- If state says something inconsistent with the current file-tool read, rebuild the raw JSONL from the current inbox file-tool content and update state.
+- Do not use git for change detection.
 
-2. On `"process inbox"`, if the state file exists, read only bytes after `processed_through_byte`.
+Preferred behavior:
 
-3. If the inbox file is smaller than `processed_through_byte`, stop. This means the inbox was rewritten or truncated.
+1. Read the full current-month inbox with Claude file tools.
+2. Parse every timestamped line.
+3. Rebuild `archive/raw/YYYY/YYYY-MM.jsonl` from the current inbox.
+4. Validate row count.
+5. Update `archive/state/YYYY-MM.state.json`.
 
-4. If historical inbox content appears to have changed, stop instead of guessing.
-
-5. Append only new JSONL rows to `archive/raw/YYYY/YYYY-MM.jsonl`.
-
-6. Update `archive/state/YYYY-MM.state.json` only after successful parsing and successful JSONL validation.
-
-7. Do not use git for change detection.
-
-8. If no state file exists, process the full current-month inbox and create the state file.
-
-9. If the unprocessed tail is empty, do not rewrite the raw JSONL file. Report that there are no new entries to process.
-
-10. If the full raw JSONL row count does not match the full inbox timestamped-entry count, stop and fix the raw JSONL.
+This intentionally favors correctness over incremental byte-offset optimization.
 
 ---
 
 # Commands
 
-- `"process inbox"` — incrementally read the current month's `inbox/YYYY-MM.md`, parse new log content, append new rows to `archive/raw/YYYY/YYYY-MM.jsonl`, validate completeness, and update `archive/state/YYYY-MM.state.json`. Do not modify `inbox/`. Do not run git.
+- `"process inbox"` — read the current month's `inbox/YYYY-MM.md` using Claude file tools, parse all timestamped log entries, rebuild `archive/raw/YYYY/YYYY-MM.jsonl`, validate completeness, and update `archive/state/YYYY-MM.state.json`. Do not modify `inbox/`. Do not run git.
 
 - `"wins"` — regenerate `archive/derived/wins.md` from available archive data.
 
-- `"weekly review"` — generate `archive/derived/weekly/YYYY-WXX.md` from the past 7 days.
+- `"weekly review"` — generate `archive/derived/weekly/YYYY-WXX.md` from the current week or past 7 days.
 
 - `"state of ralph"` — update `archive/derived/state-of-ralph.md`.
 
-- `"manifest"` — update `archive/derived/manifest.md`, the entry point explaining how Claude should use the published working-memory files.
+- `"manifest"` — update `archive/derived/manifest.md` and root `manifest.md`, the entry points explaining how Claude should use the published working-memory files.
 
-- `"publish"` — incrementally process the current inbox, validate completeness, regenerate working-memory files, and publish the processed archive and derived memory files to Google Drive using Ubuntu bash and rclone.
+- `"publish"` — process the current inbox with Claude file tools, validate completeness, regenerate working-memory files, create root aliases, and publish the processed archive and memory files to Google Drive using rclone.
 
 ---
 
@@ -319,23 +333,18 @@ Rules:
 
 ## Purpose
 
-Convert new content from the current month's hand-written inbox log into structured JSONL.
+Convert the current month's hand-written inbox log into structured JSONL.
 
-This command is incremental.
+For now, prioritize correctness over incremental processing.
 
-It should not reprocess the full monthly log if `archive/state/YYYY-MM.state.json` already exists and the inbox is append-only.
+Do not rely on bash reads of `inbox/`.
 
-AI handles semantic interpretation.
-
-Ubuntu/jq commands verify mechanical completeness.
-
-## Input
+## Inputs
 
 Current month inbox file:
 
-```bash
-FILE_MONTH="$(date +%Y-%m)"
-INBOX_FILE="inbox/$FILE_MONTH.md"
+```text
+inbox/YYYY-MM.md
 ```
 
 Example:
@@ -348,10 +357,8 @@ inbox/2026-04.md
 
 Processed archive file:
 
-```bash
-YEAR="$(date +%Y)"
-RAW_DIR="archive/raw/$YEAR"
-RAW_FILE="$RAW_DIR/$FILE_MONTH.jsonl"
+```text
+archive/raw/YYYY/YYYY-MM.jsonl
 ```
 
 Example:
@@ -362,9 +369,8 @@ archive/raw/2026/2026-04.jsonl
 
 Processing state file:
 
-```bash
-STATE_DIR="archive/state"
-STATE_FILE="$STATE_DIR/$FILE_MONTH.state.json"
+```text
+archive/state/YYYY-MM.state.json
 ```
 
 Example:
@@ -375,7 +381,7 @@ archive/state/2026-04.state.json
 
 ## JSONL row shape
 
-Each row should be one valid JSON object on one line.
+Each row must be one valid JSON object on one line.
 
 Minimum required fields:
 
@@ -389,7 +395,7 @@ Minimum required fields:
 }
 ```
 
-Recommended expanded fields when useful:
+Recommended expanded fields:
 
 ```json
 {
@@ -421,255 +427,34 @@ Rules:
 - Exact timestamp parsing must follow the inbox format.
 - One timestamped inbox line must produce exactly one JSONL row.
 
-## Human / Ubuntu / Claude Specific execution pattern
+## Procedure
 
-For this command, Claude performs the AI parsing work.
+1. Determine current month as `YYYY-MM`.
+2. Read `inbox/YYYY-MM.md` using Claude file tools.
+3. Ignore markdown headings and blank lines.
+4. For each timestamped entry line matching `YYYY-MM-DD-HHMM ...`, create one JSONL row.
+5. Rebuild `archive/raw/YYYY/YYYY-MM.jsonl` from the current inbox.
+6. Ensure every timestamped inbox line has exactly one JSONL row.
+7. Write `archive/state/YYYY-MM.state.json`.
+8. Do not modify `inbox/`.
+9. Do not run git.
 
-Ubuntu commands are used for file verification, state mechanics, and completeness checks.
+## Required state update
 
-### 1. Set current month.
+After successful processing, write state similar to:
 
-Human:
-Determine current month.
-
-Ubuntu:
-```bash
-FILE_MONTH="$(date +%Y-%m)"
-echo "$FILE_MONTH"
-```
-
-Claude Specific:
-Use the current month in `YYYY-MM` format.
-
-### 2. Set inbox, raw, and state paths.
-
-Human:
-Set all local paths.
-
-Ubuntu:
-```bash
-YEAR="$(date +%Y)"
-INBOX_FILE="inbox/$FILE_MONTH.md"
-RAW_DIR="archive/raw/$YEAR"
-RAW_FILE="$RAW_DIR/$FILE_MONTH.jsonl"
-STATE_DIR="archive/state"
-STATE_FILE="$STATE_DIR/$FILE_MONTH.state.json"
-
-echo "$INBOX_FILE"
-echo "$RAW_FILE"
-echo "$STATE_FILE"
-```
-
-Claude Specific:
-Use these exact paths.
-
-### 3. Verify inbox exists.
-
-Human:
-Stop if the inbox file is missing.
-
-Ubuntu:
-```bash
-test -f "$INBOX_FILE" || { echo "missing: $INBOX_FILE"; exit 1; }
-echo "exists: $INBOX_FILE"
-```
-
-Claude Specific:
-Run the Ubuntu command exactly. If missing, stop.
-
-### 4. Create archive directories.
-
-Human:
-Create Claude-owned archive folders if missing.
-
-Ubuntu:
-```bash
-mkdir -p "$RAW_DIR" "$STATE_DIR"
-```
-
-Claude Specific:
-Run the Ubuntu command exactly.
-
-### 5. Get current inbox size and hash.
-
-Human:
-Measure current source file.
-
-Ubuntu:
-```bash
-SOURCE_SIZE_BYTES="$(wc -c < "$INBOX_FILE" | tr -d ' ')"
-SOURCE_SHA256="$(sha256sum "$INBOX_FILE" | awk '{print $1}')"
-
-echo "$SOURCE_SIZE_BYTES"
-echo "$SOURCE_SHA256"
-```
-
-Claude Specific:
-Run the Ubuntu command exactly.
-
-### 6. Determine processed byte offset.
-
-Human:
-If state exists, use prior processed byte offset. Otherwise start at 0.
-
-Ubuntu:
-```bash
-if test -f "$STATE_FILE"; then
-  PROCESSED_THROUGH_BYTE="$(jq -r '.processed_through_byte // 0' "$STATE_FILE")"
-else
-  PROCESSED_THROUGH_BYTE="0"
-fi
-
-echo "$PROCESSED_THROUGH_BYTE"
-```
-
-Claude Specific:
-Run the Ubuntu command exactly.
-
-### 7. Guard against truncation or rewrite.
-
-Human:
-If the current inbox is smaller than the processed offset, stop.
-
-Ubuntu:
-```bash
-if [ "$SOURCE_SIZE_BYTES" -lt "$PROCESSED_THROUGH_BYTE" ]; then
-  echo "inbox appears truncated or rewritten: $INBOX_FILE"
-  exit 1
-fi
-```
-
-Claude Specific:
-Run the Ubuntu command exactly. If it fails, stop.
-
-### 8. Extract unprocessed tail.
-
-Human:
-Read only new content after the processed offset.
-
-Ubuntu:
-```bash
-TAIL_FILE="/tmp/lifevault-$FILE_MONTH-tail.md"
-
-tail -c +"$((PROCESSED_THROUGH_BYTE + 1))" "$INBOX_FILE" > "$TAIL_FILE"
-
-TAIL_BYTES="$(wc -c < "$TAIL_FILE" | tr -d ' ')"
-echo "$TAIL_FILE"
-echo "$TAIL_BYTES"
-```
-
-Claude Specific:
-Run the Ubuntu command exactly.
-
-### 9. Process new content if present.
-
-Human:
-If there is new content, parse and append it to the processed JSONL file.
-
-Ubuntu:
-```bash
-if [ "$TAIL_BYTES" = "0" ]; then
-  echo "no new inbox content to process"
-else
-  echo "new inbox content found: $TAIL_BYTES bytes"
-  sed -n '1,80p' "$TAIL_FILE"
-fi
-```
-
-Claude Specific:
-If `TAIL_BYTES` is greater than 0:
-- read `TAIL_FILE`
-- parse only this new content
-- append new JSONL rows to `RAW_FILE`
-- one timestamped line equals one JSONL row
-- do not reprocess prior inbox content
-- do not modify `INBOX_FILE`
-- do not run git
-
-If `TAIL_BYTES` is 0:
-- do not rewrite `RAW_FILE`
-- continue only if `RAW_FILE` already exists and validates
-
-### 10. Verify processed archive file exists.
-
-Human:
-The processed JSONL file must exist.
-
-Ubuntu:
-```bash
-test -f "$RAW_FILE" || { echo "missing processed file: $RAW_FILE"; exit 1; }
-echo "exists: $RAW_FILE"
-```
-
-Claude Specific:
-Run the Ubuntu command exactly.
-
-### 11. Validate JSONL syntax.
-
-Human:
-Every line in the processed file must be valid JSON.
-
-Ubuntu:
-```bash
-jq -c . "$RAW_FILE" >/dev/null && echo "valid jsonl: $RAW_FILE"
-```
-
-Claude Specific:
-Run the Ubuntu command exactly. If validation fails, stop and fix `RAW_FILE`.
-
-### 12. Validate row-count completeness.
-
-Human:
-Every timestamped inbox entry must have one JSONL row.
-
-Ubuntu:
-```bash
-EXPECTED_ROWS="$(grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{4} ' "$INBOX_FILE" | wc -l | tr -d ' ')"
-ACTUAL_ROWS="$(wc -l < "$RAW_FILE" | tr -d ' ')"
-
-echo "expected rows: $EXPECTED_ROWS"
-echo "actual rows: $ACTUAL_ROWS"
-
-test "$EXPECTED_ROWS" = "$ACTUAL_ROWS" || {
-  echo "row count mismatch: expected $EXPECTED_ROWS, got $ACTUAL_ROWS"
-  exit 1
+```json
+{
+  "source_file": "inbox/YYYY-MM.md",
+  "source_size_bytes": 0,
+  "source_sha256": "",
+  "processed_entry_count": 0,
+  "last_processed_at": "YYYY-MM-DDTHH:MM:SS",
+  "raw_file": "archive/raw/YYYY/YYYY-MM.jsonl"
 }
 ```
 
-Claude Specific:
-Run the Ubuntu command exactly. If row count mismatches, stop and fix `RAW_FILE`.
-Do not update state until this passes.
-
-### 13. Update processing state.
-
-Human:
-Update state only after successful parsing, JSONL validation, and row-count validation.
-
-Ubuntu:
-```bash
-LAST_PROCESSED_AT="$(date -Iseconds)"
-
-jq -n \
-  --arg source_file "$INBOX_FILE" \
-  --arg source_sha256 "$SOURCE_SHA256" \
-  --arg raw_file "$RAW_FILE" \
-  --arg last_processed_at "$LAST_PROCESSED_AT" \
-  --argjson source_size_bytes "$SOURCE_SIZE_BYTES" \
-  --argjson processed_through_byte "$SOURCE_SIZE_BYTES" \
-  '{
-    source_file: $source_file,
-    source_size_bytes: $source_size_bytes,
-    source_sha256: $source_sha256,
-    processed_through_byte: $processed_through_byte,
-    last_processed_at: $last_processed_at,
-    raw_file: $raw_file
-  }' > "$STATE_FILE"
-
-cat "$STATE_FILE"
-```
-
-Claude Specific:
-Run the Ubuntu command exactly after `RAW_FILE` validates and row counts match.
+`source_size_bytes` and `source_sha256` may be computed from the file-tool content rather than bash.
 
 ---
 
@@ -695,8 +480,9 @@ archive/derived/wins.md
 1. Read processed archive data.
 2. Identify wins, progress, resilience, completed tasks, recovered problems, and business/legal/technical breakthroughs.
 3. Write `archive/derived/wins.md`.
-4. Do not modify `inbox/`.
-5. Do not run git.
+4. Also write root alias `wins.md`.
+5. Do not modify `inbox/`.
+6. Do not run git.
 
 ## Output style
 
@@ -708,23 +494,24 @@ Direct. Specific. No motivational fluff unless Ralph asks.
 
 ## Purpose
 
-Generate a weekly review from the past 7 days of processed logs.
+Generate a weekly review from the current week's processed logs.
 
 ## Input priority
 
 1. `archive/raw/**/*.jsonl`
 2. `inbox/*.md` only if archive data is incomplete or missing
 
-## Output
+## Outputs
 
 ```text
 archive/derived/weekly/YYYY-WXX.md
+weekly-current.md
 ```
 
 ## Procedure
 
 1. Determine the current ISO week.
-2. Read entries from the past 7 days.
+2. Read entries for the current week or past 7 days.
 3. Summarize:
    - wins
    - problems
@@ -732,9 +519,10 @@ archive/derived/weekly/YYYY-WXX.md
    - open loops
    - risks
    - next actions
-4. Write the weekly review file.
-5. Do not modify `inbox/`.
-6. Do not run git.
+4. Write `archive/derived/weekly/YYYY-WXX.md`.
+5. Write root alias `weekly-current.md`.
+6. Do not modify `inbox/`.
+7. Do not run git.
 
 ---
 
@@ -750,10 +538,11 @@ Update Ralph's current operating state from processed logs.
 2. `archive/derived/weekly/*.md`
 3. `inbox/*.md` only if needed
 
-## Output
+## Outputs
 
 ```text
 archive/derived/state-of-ralph.md
+state-of-ralph.md
 ```
 
 ## Procedure
@@ -769,6 +558,8 @@ Update the file with:
 - open loops
 - tactical next actions
 
+Also write root alias `state-of-ralph.md`.
+
 Do not modify `inbox/`.
 
 Do not run git.
@@ -779,28 +570,45 @@ Do not run git.
 
 ## Purpose
 
-Update the entry-point file Claude should use later when reading Google Drive working memory.
+Update the entry-point files Claude should use later when reading Google Drive working memory.
 
-## Output
+## Outputs
 
 ```text
 archive/derived/manifest.md
+manifest.md
+README.md
 ```
 
 ## Required contents
 
-The manifest must explain:
+The manifest/root orientation must explain:
 
 ```text
-This folder is Ralph's published working memory.
+This folder contains Ralph's published working memory from real-world activity logs.
 
-Use these files:
-- derived/wins.md for wins and progress.
-- derived/state-of-ralph.md for current operating state.
-- derived/weekly/*.md for weekly summaries.
-- raw/YYYY/YYYY-MM.jsonl for detailed structured logs.
+Use this folder when Ralph asks broad conversational questions about his recent or historical activity, including but not limited to:
+- wins and progress
+- generator repair and sales status
+- divorce/legal status and strategy context
+- home repairs and maintenance
+- business experiments and cash runway
+- technical work
+- health, stress, and operating state
+- open loops, blockers, and next actions
+- what changed recently
+- what Ralph has already tried
+- what Ralph should focus on next
 
-Do not treat the Google Drive folder as the source of truth.
+Start with:
+- state-of-ralph.md for current operating context.
+- weekly-current.md for the most recent weekly summary.
+- wins.md for explicit wins and progress.
+- manifest.md / README.md for folder orientation.
+- raw/YYYY/YYYY-MM.jsonl for detailed structured source logs.
+
+When answering Ralph's questions, first orient from the derived files. Then drill into raw JSONL only if needed. Prefer recent entries unless Ralph asks for historical context. Use tags and body text together. Do not assume the derived files are complete if raw logs contain more detail.
+
 The local PC folder is the source of truth.
 The Google Drive folder is the published working-memory copy.
 ```
@@ -808,9 +616,11 @@ The Google Drive folder is the published working-memory copy.
 ## Procedure
 
 1. Create or update `archive/derived/manifest.md`.
-2. Keep it concise.
-3. Do not modify `inbox/`.
-4. Do not run git.
+2. Create or update root `manifest.md`.
+3. Do not overwrite `README.md` unless Ralph has explicitly allowed it. If README already exists, leave it alone.
+4. Keep manifest concise.
+5. Do not modify `inbox/`.
+6. Do not run git.
 
 ---
 
@@ -818,13 +628,9 @@ The Google Drive folder is the published working-memory copy.
 
 ## Purpose
 
-First incrementally process the current inbox into `archive/raw/YYYY/YYYY-MM.jsonl`.
+Use Claude file tools to process the current inbox and generate memory files.
 
-Then validate that every timestamped inbox entry has one JSONL row.
-
-Then regenerate working-memory files.
-
-Then publish the processed archive and derived working-memory files to Google Drive using Ubuntu bash and rclone.
+Then use rclone to publish the processed archive and memory files to Google Drive.
 
 Do not publish raw `inbox/`.
 
@@ -834,539 +640,199 @@ Do not use git.
 
 ## Required behavior
 
-- Run incremental `"process inbox"` first.
-- Validate JSONL syntax.
-- Validate row-count completeness.
+- Read `inbox/YYYY-MM.md` using Claude file tools.
+- Process all current timestamped entries into JSONL.
+- Validate that every timestamped entry has one JSONL row.
 - Regenerate:
   - `archive/derived/wins.md`
   - `archive/derived/state-of-ralph.md`
   - `archive/derived/weekly/YYYY-WXX.md`
   - `archive/derived/manifest.md`
+  - root `manifest.md`
+  - root `wins.md`
+  - root `state-of-ralph.md`
+  - root `weekly-current.md`
 - Publish only after processed JSONL exists and validates.
 - Always overwrite published files.
-- Create the Drive publish folder/subfolders only if missing.
+- Create the Drive publish folder/subfolders if missing.
 - Do not upload `inbox/YYYY-MM.md`.
 
 ## Claude Specific
 
 For this command:
 
-- Run the Ubuntu commands exactly.
-- Perform AI parsing/synthesis only where explicitly instructed.
+- Use Claude file tools for local file reading and writing.
+- Do not use bash to read `inbox/`.
+- Do not let stale bash `wc`/`cat` output block processing.
+- Use bash only for rclone upload and Drive verification after local files are written.
 - Do not use Claude's Google Drive tool.
 - Do not invent helper functions.
 - Do not run git.
 - Do not modify `inbox/`.
-- If a command fails, stop and report the failure.
+- If rclone fails, stop and report the failure.
 
 ## Procedure
 
-### 1. Set current month and week.
+### 1. Read current inbox with file tools.
 
 Human:
-Set current month, year, and ISO week.
-
-Ubuntu:
-```bash
-FILE_MONTH="$(date +%Y-%m)"
-YEAR="$(date +%Y)"
-ISO_WEEK="$(date +%G-W%V)"
-
-echo "$FILE_MONTH"
-echo "$YEAR"
-echo "$ISO_WEEK"
-```
+Read the current month inbox from the local project.
 
 Claude Specific:
-Run the Ubuntu command exactly.
+Use Claude file Read tool to read `inbox/YYYY-MM.md`.
 
-### 2. Set local paths.
+Do not use bash for this.
+
+### 2. Parse inbox.
 
 Human:
-Set inbox, raw archive, state, and derived output paths.
-
-Ubuntu:
-```bash
-INBOX_FILE="inbox/$FILE_MONTH.md"
-RAW_DIR="archive/raw/$YEAR"
-RAW_FILE="$RAW_DIR/$FILE_MONTH.jsonl"
-STATE_DIR="archive/state"
-STATE_FILE="$STATE_DIR/$FILE_MONTH.state.json"
-DERIVED_DIR="archive/derived"
-WEEKLY_DIR="$DERIVED_DIR/weekly"
-WINS_FILE="$DERIVED_DIR/wins.md"
-STATE_OF_RALPH_FILE="$DERIVED_DIR/state-of-ralph.md"
-WEEKLY_FILE="$WEEKLY_DIR/$ISO_WEEK.md"
-MANIFEST_FILE="$DERIVED_DIR/manifest.md"
-
-echo "$INBOX_FILE"
-echo "$RAW_FILE"
-echo "$STATE_FILE"
-echo "$WINS_FILE"
-echo "$STATE_OF_RALPH_FILE"
-echo "$WEEKLY_FILE"
-echo "$MANIFEST_FILE"
-```
+Convert timestamped log entries to JSONL.
 
 Claude Specific:
-Run the Ubuntu command exactly.
-
-### 3. Confirm inbox file exists.
-
-Human:
-If the inbox file is missing, stop.
-
-Ubuntu:
-```bash
-test -f "$INBOX_FILE" || { echo "missing: $INBOX_FILE"; exit 1; }
-echo "exists: $INBOX_FILE"
-```
-
-Claude Specific:
-Run the Ubuntu command exactly. If missing, stop.
-
-### 4. Create local archive directories.
-
-Human:
-Create Claude-owned archive directories if missing.
-
-Ubuntu:
-```bash
-mkdir -p "$RAW_DIR" "$STATE_DIR" "$DERIVED_DIR" "$WEEKLY_DIR"
-```
-
-Claude Specific:
-Run the Ubuntu command exactly.
-
-### 5. Get current inbox size and hash.
-
-Human:
-Measure source inbox file.
-
-Ubuntu:
-```bash
-SOURCE_SIZE_BYTES="$(wc -c < "$INBOX_FILE" | tr -d ' ')"
-SOURCE_SHA256="$(sha256sum "$INBOX_FILE" | awk '{print $1}')"
-
-echo "$SOURCE_SIZE_BYTES"
-echo "$SOURCE_SHA256"
-```
-
-Claude Specific:
-Run the Ubuntu command exactly.
-
-### 6. Determine processed byte offset.
-
-Human:
-If state exists, use prior processed byte offset. Otherwise start at 0.
-
-Ubuntu:
-```bash
-if test -f "$STATE_FILE"; then
-  PROCESSED_THROUGH_BYTE="$(jq -r '.processed_through_byte // 0' "$STATE_FILE")"
-else
-  PROCESSED_THROUGH_BYTE="0"
-fi
-
-echo "$PROCESSED_THROUGH_BYTE"
-```
-
-Claude Specific:
-Run the Ubuntu command exactly.
-
-### 7. Guard against truncation or rewrite.
-
-Human:
-If the current inbox is smaller than the processed offset, stop.
-
-Ubuntu:
-```bash
-if [ "$SOURCE_SIZE_BYTES" -lt "$PROCESSED_THROUGH_BYTE" ]; then
-  echo "inbox appears truncated or rewritten: $INBOX_FILE"
-  exit 1
-fi
-```
-
-Claude Specific:
-Run the Ubuntu command exactly. If it fails, stop.
-
-### 8. Extract unprocessed tail.
-
-Human:
-Read only new content after the processed offset.
-
-Ubuntu:
-```bash
-TAIL_FILE="/tmp/lifevault-$FILE_MONTH-tail.md"
-
-tail -c +"$((PROCESSED_THROUGH_BYTE + 1))" "$INBOX_FILE" > "$TAIL_FILE"
-
-TAIL_BYTES="$(wc -c < "$TAIL_FILE" | tr -d ' ')"
-echo "$TAIL_FILE"
-echo "$TAIL_BYTES"
-```
-
-Claude Specific:
-Run the Ubuntu command exactly.
-
-### 9. Process new content if present.
-
-Human:
-If there is new content, parse and append it to the processed JSONL file.
-
-Ubuntu:
-```bash
-if [ "$TAIL_BYTES" = "0" ]; then
-  echo "no new inbox content to process"
-else
-  echo "new inbox content found: $TAIL_BYTES bytes"
-  sed -n '1,80p' "$TAIL_FILE"
-fi
-```
-
-Claude Specific:
-If `TAIL_BYTES` is greater than 0:
-- read `TAIL_FILE`
-- parse only this new content
-- append new JSONL rows to `RAW_FILE`
-- one timestamped line equals one JSONL row
-- do not reprocess prior inbox content
-- do not modify `INBOX_FILE`
-- do not run git
-
-If `TAIL_BYTES` is 0:
-- do not rewrite `RAW_FILE`
-- continue only if `RAW_FILE` already exists and validates
-
-### 10. Verify processed archive file exists.
-
-Human:
-The processed JSONL file must exist before publishing.
-
-Ubuntu:
-```bash
-test -f "$RAW_FILE" || { echo "missing processed file: $RAW_FILE"; exit 1; }
-echo "exists: $RAW_FILE"
-```
-
-Claude Specific:
-Run the Ubuntu command exactly.
-
-### 11. Validate JSONL syntax.
-
-Human:
-Every line in the processed file must be valid JSON.
-
-Ubuntu:
-```bash
-jq -c . "$RAW_FILE" >/dev/null && echo "valid jsonl: $RAW_FILE"
-```
-
-Claude Specific:
-Run the Ubuntu command exactly. If validation fails, stop and fix `RAW_FILE`.
-
-### 12. Validate row-count completeness.
-
-Human:
-Every timestamped inbox entry must have one JSONL row.
-
-Ubuntu:
-```bash
-EXPECTED_ROWS="$(grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{4} ' "$INBOX_FILE" | wc -l | tr -d ' ')"
-ACTUAL_ROWS="$(wc -l < "$RAW_FILE" | tr -d ' ')"
-
-echo "expected rows: $EXPECTED_ROWS"
-echo "actual rows: $ACTUAL_ROWS"
-
-test "$EXPECTED_ROWS" = "$ACTUAL_ROWS" || {
-  echo "row count mismatch: expected $EXPECTED_ROWS, got $ACTUAL_ROWS"
-  exit 1
-}
-```
-
-Claude Specific:
-Run the Ubuntu command exactly. If row count mismatches, stop and fix `RAW_FILE`.
-
-### 13. Update processing state.
-
-Human:
-Update state after successful parsing and validation.
-
-Ubuntu:
-```bash
-LAST_PROCESSED_AT="$(date -Iseconds)"
-
-jq -n \
-  --arg source_file "$INBOX_FILE" \
-  --arg source_sha256 "$SOURCE_SHA256" \
-  --arg raw_file "$RAW_FILE" \
-  --arg last_processed_at "$LAST_PROCESSED_AT" \
-  --argjson source_size_bytes "$SOURCE_SIZE_BYTES" \
-  --argjson processed_through_byte "$SOURCE_SIZE_BYTES" \
-  '{
-    source_file: $source_file,
-    source_size_bytes: $source_size_bytes,
-    source_sha256: $source_sha256,
-    processed_through_byte: $processed_through_byte,
-    last_processed_at: $last_processed_at,
-    raw_file: $raw_file
-  }' > "$STATE_FILE"
-
-cat "$STATE_FILE"
-```
-
-Claude Specific:
-Run the Ubuntu command exactly.
-
-### 14. Regenerate wins.
-
-Human:
-Update wins working-memory file.
-
-Ubuntu:
-```bash
-echo "$WINS_FILE"
-```
-
-Claude Specific:
-Regenerate `archive/derived/wins.md` from `archive/raw/**/*.jsonl`.
-Do not modify `inbox/`.
-Do not run git.
-
-### 15. Regenerate state of Ralph.
-
-Human:
-Update current-state working-memory file.
-
-Ubuntu:
-```bash
-echo "$STATE_OF_RALPH_FILE"
-```
-
-Claude Specific:
-Regenerate `archive/derived/state-of-ralph.md` from:
-- `archive/raw/**/*.jsonl`
-- `archive/derived/weekly/*.md` if useful
-Do not modify `inbox/`.
-Do not run git.
-
-### 16. Regenerate weekly review.
-
-Human:
-Update current weekly review file.
-
-Ubuntu:
-```bash
-echo "$WEEKLY_FILE"
-```
-
-Claude Specific:
-Regenerate `archive/derived/weekly/YYYY-WXX.md` for the current ISO week from the past 7 days of processed logs.
-Do not modify `inbox/`.
-Do not run git.
-
-### 17. Regenerate manifest.
-
-Human:
-Update working-memory manifest.
-
-Ubuntu:
-```bash
-echo "$MANIFEST_FILE"
-```
-
-Claude Specific:
-Create or update `archive/derived/manifest.md`.
-
-It must say:
+For every line matching:
 
 ```text
-This folder is Ralph's published working memory.
-
-Use these files:
-- derived/wins.md for wins and progress.
-- derived/state-of-ralph.md for current operating state.
-- derived/weekly/*.md for weekly summaries.
-- raw/YYYY/YYYY-MM.jsonl for detailed structured logs.
-
-Do not treat the Google Drive folder as the source of truth.
-The local PC folder is the source of truth.
-The Google Drive folder is the published working-memory copy.
+YYYY-MM-DD-HHMM [tag][tag] - body text
 ```
 
-### 18. Verify derived files exist.
+create exactly one JSONL row.
+
+Preserve:
+- timestamp
+- date
+- time
+- tags
+- body
+
+Add semantic signals if useful.
+
+### 3. Write raw JSONL.
 
 Human:
-All working-memory files must exist before upload.
-
-Ubuntu:
-```bash
-test -f "$WINS_FILE" || { echo "missing: $WINS_FILE"; exit 1; }
-test -f "$STATE_OF_RALPH_FILE" || { echo "missing: $STATE_OF_RALPH_FILE"; exit 1; }
-test -f "$WEEKLY_FILE" || { echo "missing: $WEEKLY_FILE"; exit 1; }
-test -f "$MANIFEST_FILE" || { echo "missing: $MANIFEST_FILE"; exit 1; }
-
-echo "derived files exist"
-```
+Write the processed structured log.
 
 Claude Specific:
-Run the Ubuntu command exactly.
+Write or overwrite:
 
-### 19. Count publish bytes.
-
-Human:
-Get total bytes for final report.
-
-Ubuntu:
-```bash
-RAW_BYTES="$(wc -c < "$RAW_FILE" | tr -d ' ')"
-WINS_BYTES="$(wc -c < "$WINS_FILE" | tr -d ' ')"
-STATE_BYTES="$(wc -c < "$STATE_OF_RALPH_FILE" | tr -d ' ')"
-WEEKLY_BYTES="$(wc -c < "$WEEKLY_FILE" | tr -d ' ')"
-MANIFEST_BYTES="$(wc -c < "$MANIFEST_FILE" | tr -d ' ')"
-TOTAL_BYTES="$((RAW_BYTES + WINS_BYTES + STATE_BYTES + WEEKLY_BYTES + MANIFEST_BYTES))"
-
-echo "$TOTAL_BYTES"
+```text
+archive/raw/YYYY/YYYY-MM.jsonl
 ```
 
-Claude Specific:
-Run the Ubuntu command exactly.
+Use one valid JSON object per line.
 
-### 20. Confirm rclone remote works.
+### 4. Validate row count.
 
 Human:
-Verify Google Drive remote named `gdrive`.
+Make sure no timestamped entries were skipped.
 
-Ubuntu:
-```bash
-rclone lsd gdrive: >/dev/null
-echo "rclone gdrive remote works"
+Claude Specific:
+Count timestamped entries from the file-tool-read inbox content.
+
+Count JSONL rows written.
+
+If counts differ, fix the JSONL before continuing.
+
+### 5. Write processing state.
+
+Human:
+Update state metadata.
+
+Claude Specific:
+Write or overwrite:
+
+```text
+archive/state/YYYY-MM.state.json
 ```
 
-Claude Specific:
-Run the Ubuntu command exactly. If it fails, stop and report that `gdrive` remote is not configured.
+Include:
+- source file
+- source size/hash if computable from file-tool content
+- processed entry count
+- last processed time
+- raw file path
 
-### 21. Set publish folder and Drive paths.
+### 6. Regenerate working-memory files.
 
 Human:
-Set Drive publish folder paths.
+Create summaries and aliases for broad conversational retrieval.
 
-Ubuntu:
+Claude Specific:
+Generate/update:
+
+```text
+archive/derived/wins.md
+archive/derived/state-of-ralph.md
+archive/derived/weekly/YYYY-WXX.md
+archive/derived/manifest.md
+manifest.md
+wins.md
+state-of-ralph.md
+weekly-current.md
+```
+
+Do not modify `inbox/`.
+
+### 7. Publish to Google Drive with rclone.
+
+Human:
+Use rclone to upload generated files to Drive.
+
+Bash:
 ```bash
+set -e
+
 PUBLISH_FOLDER="2026-lifevault-published"
-DRIVE_RAW_DIR="$PUBLISH_FOLDER/raw/$YEAR"
-DRIVE_DERIVED_DIR="$PUBLISH_FOLDER/derived"
-DRIVE_WEEKLY_DIR="$PUBLISH_FOLDER/derived/weekly"
-PUBLISH_RAW_FILE="$FILE_MONTH.jsonl"
-PUBLISH_WEEKLY_FILE="$ISO_WEEK.md"
 
-echo "$PUBLISH_FOLDER"
-echo "$DRIVE_RAW_DIR"
-echo "$DRIVE_DERIVED_DIR"
-echo "$DRIVE_WEEKLY_DIR"
-```
-
-Claude Specific:
-Run the Ubuntu command exactly.
-
-### 22. Ensure Drive publish folders exist.
-
-Human:
-Create Drive folders if missing.
-
-Ubuntu:
-```bash
 rclone mkdir "gdrive:$PUBLISH_FOLDER"
-rclone mkdir "gdrive:$DRIVE_RAW_DIR"
-rclone mkdir "gdrive:$DRIVE_DERIVED_DIR"
-rclone mkdir "gdrive:$DRIVE_WEEKLY_DIR"
+rclone mkdir "gdrive:$PUBLISH_FOLDER/raw"
+rclone mkdir "gdrive:$PUBLISH_FOLDER/derived"
+rclone mkdir "gdrive:$PUBLISH_FOLDER/derived/weekly"
 
-echo "drive folders ensured"
-```
+YEAR="$(date +%Y)"
+FILE_MONTH="$(date +%Y-%m)"
+ISO_WEEK="$(date +%G-W%V)"
 
-Claude Specific:
-Run the Ubuntu command exactly.
+rclone mkdir "gdrive:$PUBLISH_FOLDER/raw/$YEAR"
 
-### 23. Upload processed raw file.
+rclone copyto "archive/raw/$YEAR/$FILE_MONTH.jsonl" "gdrive:$PUBLISH_FOLDER/raw/$YEAR/$FILE_MONTH.jsonl"
 
-Human:
-Upload `archive/raw/YYYY/YYYY-MM.jsonl`.
+rclone copyto "archive/derived/wins.md" "gdrive:$PUBLISH_FOLDER/derived/wins.md"
+rclone copyto "archive/derived/state-of-ralph.md" "gdrive:$PUBLISH_FOLDER/derived/state-of-ralph.md"
+rclone copyto "archive/derived/weekly/$ISO_WEEK.md" "gdrive:$PUBLISH_FOLDER/derived/weekly/$ISO_WEEK.md"
+rclone copyto "archive/derived/manifest.md" "gdrive:$PUBLISH_FOLDER/derived/manifest.md"
 
-Ubuntu:
-```bash
-rclone copyto "$RAW_FILE" "gdrive:$DRIVE_RAW_DIR/$PUBLISH_RAW_FILE"
-```
+rclone copyto "manifest.md" "gdrive:$PUBLISH_FOLDER/manifest.md"
+rclone copyto "wins.md" "gdrive:$PUBLISH_FOLDER/wins.md"
+rclone copyto "state-of-ralph.md" "gdrive:$PUBLISH_FOLDER/state-of-ralph.md"
+rclone copyto "weekly-current.md" "gdrive:$PUBLISH_FOLDER/weekly-current.md"
 
-Claude Specific:
-Run the Ubuntu command exactly.
+if test -f README.md; then
+  rclone copyto "README.md" "gdrive:$PUBLISH_FOLDER/README.md"
+fi
 
-### 24. Upload derived working-memory files.
-
-Human:
-Upload derived memory files.
-
-Ubuntu:
-```bash
-rclone copyto "$WINS_FILE" "gdrive:$DRIVE_DERIVED_DIR/wins.md"
-rclone copyto "$STATE_OF_RALPH_FILE" "gdrive:$DRIVE_DERIVED_DIR/state-of-ralph.md"
-rclone copyto "$WEEKLY_FILE" "gdrive:$DRIVE_WEEKLY_DIR/$PUBLISH_WEEKLY_FILE"
-rclone copyto "$MANIFEST_FILE" "gdrive:$PUBLISH_FOLDER/manifest.md"
-```
-
-Claude Specific:
-Run the Ubuntu command exactly.
-
-### 25. Verify uploaded files.
-
-Human:
-Confirm expected files exist in Drive.
-
-Ubuntu:
-```bash
-rclone lsjson "gdrive:$DRIVE_RAW_DIR" --files-only \
-  | jq -e --arg name "$PUBLISH_RAW_FILE" '.[] | select(.Name == $name)' >/dev/null
-
-rclone lsjson "gdrive:$DRIVE_DERIVED_DIR" --files-only \
-  | jq -e '.[] | select(.Name == "wins.md")' >/dev/null
-
-rclone lsjson "gdrive:$DRIVE_DERIVED_DIR" --files-only \
-  | jq -e '.[] | select(.Name == "state-of-ralph.md")' >/dev/null
-
-rclone lsjson "gdrive:$DRIVE_WEEKLY_DIR" --files-only \
-  | jq -e --arg name "$PUBLISH_WEEKLY_FILE" '.[] | select(.Name == $name)' >/dev/null
-
-rclone lsjson "gdrive:$PUBLISH_FOLDER" --files-only \
-  | jq -e '.[] | select(.Name == "manifest.md")' >/dev/null
-
-echo "uploaded files verified"
-```
-
-Claude Specific:
-Run the Ubuntu command exactly. If any verification fails, stop.
-
-### 26. Final reply.
-
-Human:
-Reply only with the publish result.
-
-Ubuntu:
-```bash
 echo "Folder: $PUBLISH_FOLDER"
-echo "Published raw: raw/$YEAR/$PUBLISH_RAW_FILE ($RAW_BYTES bytes)"
-echo "Published derived: wins.md, state-of-ralph.md, weekly/$PUBLISH_WEEKLY_FILE, manifest.md"
-echo "Total bytes: $TOTAL_BYTES"
+echo "Published raw: raw/$YEAR/$FILE_MONTH.jsonl"
+echo "Published derived: wins.md, state-of-ralph.md, weekly/$ISO_WEEK.md, manifest.md"
+echo "Published root aliases: manifest.md, wins.md, state-of-ralph.md, weekly-current.md"
 ```
 
 Claude Specific:
-Reply with exactly the four echoed lines.
+Run the bash block only after local files have been generated with file tools.
 
-Expected final format:
+If rclone fails, stop and report the exact failure.
+
+### 8. Final reply.
+
+Claude Specific:
+Reply with the final echoed publish result.
+
+Expected format:
 
 ```text
 Folder: 2026-lifevault-published
-Published raw: raw/YYYY/YYYY-MM.jsonl (<bytes> bytes)
+Published raw: raw/YYYY/YYYY-MM.jsonl
 Published derived: wins.md, state-of-ralph.md, weekly/YYYY-WXX.md, manifest.md
-Total bytes: <bytes>
+Published root aliases: manifest.md, wins.md, state-of-ralph.md, weekly-current.md
 ```
 
 ---
