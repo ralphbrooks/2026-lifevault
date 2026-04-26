@@ -6,7 +6,7 @@ A personal log + working-memory system.
 
 The local PC folder is Ralph's source of truth.
 
-Git is Ralph's external backup/version-control system.
+GitHub/git is Ralph's external backup/version-control system.
 
 Google Drive is Claude's published working memory.
 
@@ -16,7 +16,7 @@ Claude never reads git logs.
 
 Claude never runs git commands.
 
-## Current important Cowork rule
+## Current Cowork rule
 
 Claude Cowork may have a stale bash filesystem mount.
 
@@ -24,44 +24,87 @@ Therefore:
 
 - Claude file tools are the source of truth for reading and writing local project files.
 - Bash is not the source of truth for local project files.
-- Bash is used only for rclone publishing to Google Drive and optional Drive verification.
-- Do not use bash `cat`, `wc`, `tail`, or shell file reads of `inbox/` to decide what the inbox contains.
+- Bash must not be used to read or validate `inbox/`.
 - If Claude's file Read tool and bash disagree, trust Claude's file Read tool for local project content.
+- Claude should use its Google Drive connector/tool for publishing to Google Drive.
+- Do not use `rclone` inside Cowork.
 
 ## Goal
 
 The workflow is:
 
 1. Ralph edits logs on PC in `inbox/YYYY-MM.md`.
-2. Ralph may commit/push those edits to git himself.
-3. Ralph runs `"publish"` in Claude Cowork.
-4. Claude reads the current inbox using Claude file tools, not bash.
-5. Claude processes the current inbox into structured JSONL.
-6. Claude regenerates working-memory summaries.
-7. Claude writes/updates local archive and derived memory files.
-8. Claude publishes the processed archive and working-memory files to Google Drive using bash + rclone.
-9. Later, Ralph can ask Claude to reference Google Drive and answer broad questions such as:
-   - "Tell me my wins."
-   - "Where am I on Generator 8?"
-   - "Where am I relative to divorce?"
-   - "What changed recently?"
-   - "What are my open loops?"
-   - "What should I focus on next?"
+2. Ralph may commit/push those edits to GitHub himself.
+3. Ralph updates these project instructions in Cowork.
+4. Ralph types `"publish"` in Cowork.
+5. Claude reads the current inbox using Claude file tools, not bash.
+6. Claude processes the current inbox into structured JSONL.
+7. Claude regenerates working-memory summaries.
+8. Claude writes/updates local archive and root alias files.
+9. Claude publishes the processed archive and memory files to Google Drive using Claude's Google Drive connector/tool.
+10. Ralph can verify from WSL2 using `rclone` if he wants.
+11. Later, Ralph can ask Claude web: "Reference info on Google Drive. Tell me my wins for this week."
 
 ## Core principle
 
 AI performs semantic interpretation.
 
-Script/tool checks perform mechanical verification.
+Claude file tools perform local project reading/writing.
 
-Claude should use AI judgment for converting human-language log text into structured JSONL and summaries.
+Claude Google Drive connector/tool performs Google Drive publishing.
 
-Claude should use deterministic checks to verify:
+Ralph may use WSL2/rclone separately to verify that Google Drive changed.
 
-- every timestamped inbox entry was processed
-- JSONL is valid
-- expected local output files exist
-- expected Drive files were uploaded
+Do not make Cowork depend on local bash or `rclone` for publish.
+
+## Required progress logging
+
+When running `publish`, Claude must show concise progress logs so Ralph can verify that Cowork is not going rogue.
+
+Use visible progress messages in this style:
+
+```text
+=== publish: read inbox ===
+Read inbox/YYYY-MM.md with file tool.
+Found <N> timestamped entries.
+
+=== publish: write raw jsonl ===
+Wrote archive/raw/YYYY/YYYY-MM.jsonl with <N> rows.
+Row-count check: <N> entries -> <N> rows. PASS.
+
+=== publish: write derived memory ===
+Wrote archive/derived/wins.md.
+Wrote archive/derived/state-of-ralph.md.
+Wrote archive/derived/weekly/YYYY-WXX.md.
+Wrote archive/derived/manifest.md.
+Wrote root aliases: manifest.md, wins.md, state-of-ralph.md, weekly-current.md.
+
+=== publish: google drive ===
+Publishing to Google Drive folder: 2026-lifevault-published.
+Published raw/YYYY/YYYY-MM.jsonl.
+Published derived files.
+Published root aliases.
+
+=== publish: complete ===
+Folder: 2026-lifevault-published
+Published raw: raw/YYYY/YYYY-MM.jsonl
+Published derived: wins.md, state-of-ralph.md, weekly/YYYY-WXX.md, manifest.md
+Published root aliases: manifest.md, wins.md, state-of-ralph.md, weekly-current.md
+```
+
+If any step fails, stop and report:
+
+```text
+=== publish: failed ===
+Step: <step name>
+Failure: <exact failure>
+Files modified before failure: <list>
+Files not modified: <list if important>
+```
+
+Do not hide failures.
+
+Do not continue after a publishing failure unless Ralph explicitly tells you to continue.
 
 ## Ownership model
 
@@ -100,7 +143,7 @@ Claude never modifies git state.
 
 ## Git model
 
-Ralph uses git as his external copy / backup after adding logs.
+Ralph uses git/GitHub as his external copy / backup after adding logs.
 
 This is Ralph's workflow only.
 
@@ -124,32 +167,18 @@ Claude uses local project files and `archive/state/*.state.json` for processing 
 
 Google Drive is Claude's published working memory.
 
-Publishing to Google Drive is done with bash and `rclone`.
+Publishing to Google Drive is done with Claude's Google Drive connector/tool.
 
 For the `"publish"` command:
 
 - Use Claude file tools for local file reading/writing.
-- Use bash/rclone only for Google Drive upload and Drive verification.
-- Do not use Claude's Google Drive tool for publishing.
+- Use Claude Google Drive connector/tool for Drive publishing.
+- Do not use bash/rclone inside Cowork.
+- Do not use bash to read `inbox/`.
 
-Claude's Google Drive connector may later be used in chat to read the published files after they have been uploaded by rclone.
+Claude's Google Drive connector may later be used in chat to read the published files after they have been uploaded.
 
-If Claude cannot later find the files through the Google Drive connector, the issue is Drive connector access/indexing, not the local publish process.
-
-## Required local setup for publishing
-
-The local system must have:
-
-- `rclone`
-- an rclone Google Drive remote named `gdrive`
-
-Bash setup check, used only for rclone:
-
-```bash
-rclone version
-rclone lsd gdrive: >/dev/null
-echo "rclone gdrive remote works"
-```
+If Claude cannot later find the files through the Google Drive connector, the issue is Drive connector access/indexing, not local processing.
 
 ## Google Drive publish folder
 
@@ -159,7 +188,7 @@ The Drive publish folder is:
 2026-lifevault-published
 ```
 
-It lives at Google Drive root under the `gdrive:` rclone remote.
+It lives at Google Drive root.
 
 Published Drive layout:
 
@@ -174,6 +203,7 @@ Published Drive layout:
     YYYY/
       YYYY-MM.jsonl
   derived/
+    manifest.md
     wins.md
     state-of-ralph.md
     weekly/
@@ -209,19 +239,19 @@ Canonical generated files live under `archive/` locally and under `derived/` / `
    - process the current inbox into `archive/raw/YYYY/YYYY-MM.jsonl`
    - regenerate working-memory files under `archive/derived/`
    - create/update root-level retrieval aliases
-   - publish the processed archive and memory files to Google Drive using rclone
+   - publish the processed archive and memory files to Google Drive using Claude's Google Drive connector/tool
 
 5. Claude writes only inside `archive/` plus root-level memory alias files.
 
-6. For `"publish"`, do not use Claude's Google Drive tool.
+6. For `"publish"`, do not use `rclone` inside Cowork.
 
-7. For `"publish"`, use bash/rclone only after local files have been generated with Claude file tools.
+7. For `"publish"`, do not use bash to read local project files.
 
 8. Do not invent helper functions.
 
-9. Do not ask questions during command execution unless a required file, command, or rclone remote is missing.
+9. Do not ask questions during command execution unless a required file, file tool, or Google Drive connector/tool is unavailable.
 
-10. If a command fails, stop and report the exact failure.
+10. If Google Drive publishing fails, stop and report the exact failure.
 
 ---
 
@@ -235,7 +265,7 @@ Ignore markdown heading lines such as:
 # Inbox — April 2026
 ```
 
-Each nonblank line matching this pattern is one separate log entry:
+Standard entry format:
 
 ```text
 YYYY-MM-DD-HHMM [tag][tag] - body text
@@ -261,9 +291,27 @@ Parsing rules:
 - AI may interpret the body semantically, but it must preserve the original meaning.
 - AI may add normalized fields or signals when useful, but the raw body must remain available.
 
+## Tolerant parsing rule
+
+If a line is clearly intended as a timestamped log entry but has a minor format error, process it rather than dropping it.
+
+Examples of minor format errors:
+
+- `2020-4-21-1200 [win]: body`
+- missing leading zero in month or day
+- colon instead of ` - ` separator
+
+When tolerant parsing is used:
+
+- Preserve the original line in `raw_line`.
+- Normalize the best-known date/time if obvious.
+- Add a `parse_note` field explaining the issue.
+- Do not silently discard the line.
+- If date is ambiguous, keep the row but add `date_uncertain: true`.
+
 ## Mechanical completeness rule
 
-Every timestamped inbox entry must appear as exactly one JSONL row.
+Every timestamped or timestamp-intended inbox entry must appear as exactly one JSONL row.
 
 This is a mechanical validation rule, not a semantic rule.
 
@@ -304,7 +352,7 @@ Important:
 Preferred behavior:
 
 1. Read the full current-month inbox with Claude file tools.
-2. Parse every timestamped line.
+2. Parse every timestamped or clearly timestamp-intended line.
 3. Rebuild `archive/raw/YYYY/YYYY-MM.jsonl` from the current inbox.
 4. Validate row count.
 5. Update `archive/state/YYYY-MM.state.json`.
@@ -317,15 +365,15 @@ This intentionally favors correctness over incremental byte-offset optimization.
 
 - `"process inbox"` — read the current month's `inbox/YYYY-MM.md` using Claude file tools, parse all timestamped log entries, rebuild `archive/raw/YYYY/YYYY-MM.jsonl`, validate completeness, and update `archive/state/YYYY-MM.state.json`. Do not modify `inbox/`. Do not run git.
 
-- `"wins"` — regenerate `archive/derived/wins.md` from available archive data.
+- `"wins"` — regenerate `archive/derived/wins.md` and root `wins.md` from available archive data.
 
-- `"weekly review"` — generate `archive/derived/weekly/YYYY-WXX.md` from the current week or past 7 days.
+- `"weekly review"` — generate `archive/derived/weekly/YYYY-WXX.md` and root `weekly-current.md`.
 
-- `"state of ralph"` — update `archive/derived/state-of-ralph.md`.
+- `"state of ralph"` — update `archive/derived/state-of-ralph.md` and root `state-of-ralph.md`.
 
-- `"manifest"` — update `archive/derived/manifest.md` and root `manifest.md`, the entry points explaining how Claude should use the published working-memory files.
+- `"manifest"` — update `archive/derived/manifest.md` and root `manifest.md`.
 
-- `"publish"` — process the current inbox with Claude file tools, validate completeness, regenerate working-memory files, create root aliases, and publish the processed archive and memory files to Google Drive using rclone.
+- `"publish"` — process the current inbox with Claude file tools, validate completeness, regenerate working-memory files, create root aliases, and publish the processed archive and memory files to Google Drive using Claude's Google Drive connector/tool.
 
 ---
 
@@ -406,6 +454,7 @@ Recommended expanded fields:
   "entry_type": "log",
   "tags": [],
   "body": "...",
+  "raw_line": "...",
   "signals": {
     "win": false,
     "stress": false,
@@ -424,7 +473,7 @@ Rules:
 - `body` must preserve the meaning of the human-written entry.
 - Tags from the inbox line must be preserved.
 - Claude may add normalized fields or signals if useful.
-- Exact timestamp parsing must follow the inbox format.
+- Exact timestamp parsing must follow the inbox format when possible.
 - One timestamped inbox line must produce exactly one JSONL row.
 
 ## Procedure
@@ -432,12 +481,31 @@ Rules:
 1. Determine current month as `YYYY-MM`.
 2. Read `inbox/YYYY-MM.md` using Claude file tools.
 3. Ignore markdown headings and blank lines.
-4. For each timestamped entry line matching `YYYY-MM-DD-HHMM ...`, create one JSONL row.
+4. For each timestamped entry line, create one JSONL row.
 5. Rebuild `archive/raw/YYYY/YYYY-MM.jsonl` from the current inbox.
-6. Ensure every timestamped inbox line has exactly one JSONL row.
+6. Ensure every timestamped or timestamp-intended inbox line has exactly one JSONL row.
 7. Write `archive/state/YYYY-MM.state.json`.
 8. Do not modify `inbox/`.
 9. Do not run git.
+
+## Required progress log
+
+Show:
+
+```text
+=== process inbox: read ===
+Read inbox/YYYY-MM.md.
+Found <N> timestamped entries.
+
+=== process inbox: write ===
+Wrote archive/raw/YYYY/YYYY-MM.jsonl with <N> rows.
+
+=== process inbox: validate ===
+Row-count check: <N> entries -> <N> rows. PASS.
+
+=== process inbox: state ===
+Wrote archive/state/YYYY-MM.state.json.
+```
 
 ## Required state update
 
@@ -469,10 +537,11 @@ Regenerate the wins summary from available processed archive data.
 1. `archive/raw/**/*.jsonl`
 2. `inbox/*.md` only if archive data is incomplete or missing
 
-## Output
+## Outputs
 
 ```text
 archive/derived/wins.md
+wins.md
 ```
 
 ## Procedure
@@ -483,6 +552,16 @@ archive/derived/wins.md
 4. Also write root alias `wins.md`.
 5. Do not modify `inbox/`.
 6. Do not run git.
+
+## Required progress log
+
+Show:
+
+```text
+=== wins: write ===
+Wrote archive/derived/wins.md.
+Wrote root alias wins.md.
+```
 
 ## Output style
 
@@ -524,6 +603,16 @@ weekly-current.md
 6. Do not modify `inbox/`.
 7. Do not run git.
 
+## Required progress log
+
+Show:
+
+```text
+=== weekly review: write ===
+Wrote archive/derived/weekly/YYYY-WXX.md.
+Wrote root alias weekly-current.md.
+```
+
 ---
 
 # Command: state of ralph
@@ -564,6 +653,16 @@ Do not modify `inbox/`.
 
 Do not run git.
 
+## Required progress log
+
+Show:
+
+```text
+=== state of ralph: write ===
+Wrote archive/derived/state-of-ralph.md.
+Wrote root alias state-of-ralph.md.
+```
+
 ---
 
 # Command: manifest
@@ -577,7 +676,6 @@ Update the entry-point files Claude should use later when reading Google Drive w
 ```text
 archive/derived/manifest.md
 manifest.md
-README.md
 ```
 
 ## Required contents
@@ -622,6 +720,17 @@ The Google Drive folder is the published working-memory copy.
 5. Do not modify `inbox/`.
 6. Do not run git.
 
+## Required progress log
+
+Show:
+
+```text
+=== manifest: write ===
+Wrote archive/derived/manifest.md.
+Wrote root alias manifest.md.
+README.md left unchanged unless explicitly allowed.
+```
+
 ---
 
 # Command: publish
@@ -630,19 +739,19 @@ The Google Drive folder is the published working-memory copy.
 
 Use Claude file tools to process the current inbox and generate memory files.
 
-Then use rclone to publish the processed archive and memory files to Google Drive.
+Then use Claude's Google Drive connector/tool to publish the processed archive and memory files to Google Drive.
 
 Do not publish raw `inbox/`.
 
-Do not use Claude's Google Drive tool.
+Do not use rclone inside Cowork.
 
 Do not use git.
 
 ## Required behavior
 
 - Read `inbox/YYYY-MM.md` using Claude file tools.
-- Process all current timestamped entries into JSONL.
-- Validate that every timestamped entry has one JSONL row.
+- Process all current timestamped or timestamp-intended entries into JSONL.
+- Validate that every entry has one JSONL row.
 - Regenerate:
   - `archive/derived/wins.md`
   - `archive/derived/state-of-ralph.md`
@@ -663,13 +772,14 @@ For this command:
 
 - Use Claude file tools for local file reading and writing.
 - Do not use bash to read `inbox/`.
-- Do not let stale bash `wc`/`cat` output block processing.
-- Use bash only for rclone upload and Drive verification after local files are written.
-- Do not use Claude's Google Drive tool.
+- Do not use `rclone`.
+- Use Claude's Google Drive connector/tool for Drive publishing.
+- Do not use bash `wc`, `cat`, or `tail` on local project files.
+- Do not let stale bash output block processing.
 - Do not invent helper functions.
 - Do not run git.
 - Do not modify `inbox/`.
-- If rclone fails, stop and report the failure.
+- If Google Drive publishing fails, stop and report the exact failure.
 
 ## Procedure
 
@@ -683,13 +793,21 @@ Use Claude file Read tool to read `inbox/YYYY-MM.md`.
 
 Do not use bash for this.
 
+Progress log:
+
+```text
+=== publish: read inbox ===
+Read inbox/YYYY-MM.md with file tool.
+Found <N> timestamped entries.
+```
+
 ### 2. Parse inbox.
 
 Human:
 Convert timestamped log entries to JSONL.
 
 Claude Specific:
-For every line matching:
+For every line matching or clearly intending:
 
 ```text
 YYYY-MM-DD-HHMM [tag][tag] - body text
@@ -703,8 +821,17 @@ Preserve:
 - time
 - tags
 - body
+- raw line when useful
 
 Add semantic signals if useful.
+
+Progress log:
+
+```text
+=== publish: parse inbox ===
+Parsed <N> entries.
+Tolerant parsed entries: <M>.
+```
 
 ### 3. Write raw JSONL.
 
@@ -720,17 +847,31 @@ archive/raw/YYYY/YYYY-MM.jsonl
 
 Use one valid JSON object per line.
 
+Progress log:
+
+```text
+=== publish: write raw jsonl ===
+Wrote archive/raw/YYYY/YYYY-MM.jsonl with <N> rows.
+```
+
 ### 4. Validate row count.
 
 Human:
 Make sure no timestamped entries were skipped.
 
 Claude Specific:
-Count timestamped entries from the file-tool-read inbox content.
+Count timestamped or timestamp-intended entries from the file-tool-read inbox content.
 
 Count JSONL rows written.
 
 If counts differ, fix the JSONL before continuing.
+
+Progress log:
+
+```text
+=== publish: validate raw jsonl ===
+Row-count check: <N> entries -> <N> rows. PASS.
+```
 
 ### 5. Write processing state.
 
@@ -750,6 +891,13 @@ Include:
 - processed entry count
 - last processed time
 - raw file path
+
+Progress log:
+
+```text
+=== publish: write state ===
+Wrote archive/state/YYYY-MM.state.json.
+```
 
 ### 6. Regenerate working-memory files.
 
@@ -772,68 +920,160 @@ weekly-current.md
 
 Do not modify `inbox/`.
 
-### 7. Publish to Google Drive with rclone.
+Progress log:
 
-Human:
-Use rclone to upload generated files to Drive.
-
-Bash:
-```bash
-set -e
-
-PUBLISH_FOLDER="2026-lifevault-published"
-
-rclone mkdir "gdrive:$PUBLISH_FOLDER"
-rclone mkdir "gdrive:$PUBLISH_FOLDER/raw"
-rclone mkdir "gdrive:$PUBLISH_FOLDER/derived"
-rclone mkdir "gdrive:$PUBLISH_FOLDER/derived/weekly"
-
-YEAR="$(date +%Y)"
-FILE_MONTH="$(date +%Y-%m)"
-ISO_WEEK="$(date +%G-W%V)"
-
-rclone mkdir "gdrive:$PUBLISH_FOLDER/raw/$YEAR"
-
-rclone copyto "archive/raw/$YEAR/$FILE_MONTH.jsonl" "gdrive:$PUBLISH_FOLDER/raw/$YEAR/$FILE_MONTH.jsonl"
-
-rclone copyto "archive/derived/wins.md" "gdrive:$PUBLISH_FOLDER/derived/wins.md"
-rclone copyto "archive/derived/state-of-ralph.md" "gdrive:$PUBLISH_FOLDER/derived/state-of-ralph.md"
-rclone copyto "archive/derived/weekly/$ISO_WEEK.md" "gdrive:$PUBLISH_FOLDER/derived/weekly/$ISO_WEEK.md"
-rclone copyto "archive/derived/manifest.md" "gdrive:$PUBLISH_FOLDER/derived/manifest.md"
-
-rclone copyto "manifest.md" "gdrive:$PUBLISH_FOLDER/manifest.md"
-rclone copyto "wins.md" "gdrive:$PUBLISH_FOLDER/wins.md"
-rclone copyto "state-of-ralph.md" "gdrive:$PUBLISH_FOLDER/state-of-ralph.md"
-rclone copyto "weekly-current.md" "gdrive:$PUBLISH_FOLDER/weekly-current.md"
-
-if test -f README.md; then
-  rclone copyto "README.md" "gdrive:$PUBLISH_FOLDER/README.md"
-fi
-
-echo "Folder: $PUBLISH_FOLDER"
-echo "Published raw: raw/$YEAR/$FILE_MONTH.jsonl"
-echo "Published derived: wins.md, state-of-ralph.md, weekly/$ISO_WEEK.md, manifest.md"
-echo "Published root aliases: manifest.md, wins.md, state-of-ralph.md, weekly-current.md"
+```text
+=== publish: write derived memory ===
+Wrote archive/derived/wins.md.
+Wrote archive/derived/state-of-ralph.md.
+Wrote archive/derived/weekly/YYYY-WXX.md.
+Wrote archive/derived/manifest.md.
+Wrote root aliases: manifest.md, wins.md, state-of-ralph.md, weekly-current.md.
 ```
 
-Claude Specific:
-Run the bash block only after local files have been generated with file tools.
+### 7. Publish to Google Drive with connector/tool.
 
-If rclone fails, stop and report the exact failure.
+Human:
+Publish generated files to Google Drive.
+
+Claude Specific:
+Use Claude's Google Drive connector/tool.
+
+Drive folder:
+
+```text
+2026-lifevault-published
+```
+
+If the folder does not exist at Drive root, create it.
+
+If the folder exists, use it.
+
+If multiple folders exist with this exact name, use the first/oldest visible folder and do not delete duplicates.
+
+Create subfolders if missing:
+
+```text
+raw/YYYY
+derived
+derived/weekly
+```
+
+Overwrite each published file by replacing the existing file with the same name in the target folder.
+
+Publish these files:
+
+Local to Drive:
+
+```text
+archive/raw/YYYY/YYYY-MM.jsonl
+→ 2026-lifevault-published/raw/YYYY/YYYY-MM.jsonl
+
+archive/derived/wins.md
+→ 2026-lifevault-published/derived/wins.md
+
+archive/derived/state-of-ralph.md
+→ 2026-lifevault-published/derived/state-of-ralph.md
+
+archive/derived/weekly/YYYY-WXX.md
+→ 2026-lifevault-published/derived/weekly/YYYY-WXX.md
+
+archive/derived/manifest.md
+→ 2026-lifevault-published/derived/manifest.md
+
+manifest.md
+→ 2026-lifevault-published/manifest.md
+
+wins.md
+→ 2026-lifevault-published/wins.md
+
+state-of-ralph.md
+→ 2026-lifevault-published/state-of-ralph.md
+
+weekly-current.md
+→ 2026-lifevault-published/weekly-current.md
+```
+
+If local `README.md` exists, also publish:
+
+```text
+README.md
+→ 2026-lifevault-published/README.md
+```
+
+Do not publish `inbox/YYYY-MM.md`.
+
+Progress log:
+
+```text
+=== publish: google drive ===
+Publishing to Google Drive folder: 2026-lifevault-published.
+Ensured folder: 2026-lifevault-published.
+Ensured folder: raw/YYYY.
+Ensured folder: derived.
+Ensured folder: derived/weekly.
+Published raw/YYYY/YYYY-MM.jsonl.
+Published derived/wins.md.
+Published derived/state-of-ralph.md.
+Published derived/weekly/YYYY-WXX.md.
+Published derived/manifest.md.
+Published manifest.md.
+Published wins.md.
+Published state-of-ralph.md.
+Published weekly-current.md.
+Published README.md if present.
+```
 
 ### 8. Final reply.
 
 Claude Specific:
-Reply with the final echoed publish result.
+Reply with the final publish result.
 
 Expected format:
 
 ```text
+=== publish: complete ===
 Folder: 2026-lifevault-published
 Published raw: raw/YYYY/YYYY-MM.jsonl
 Published derived: wins.md, state-of-ralph.md, weekly/YYYY-WXX.md, manifest.md
 Published root aliases: manifest.md, wins.md, state-of-ralph.md, weekly-current.md
 ```
+
+---
+
+# Ralph's WSL2 verification after Cowork publish
+
+Ralph may verify from WSL2 using his own configured `rclone`.
+
+This is for Ralph, not Cowork.
+
+```bash
+cd /mnt/c/Users/Ralph/Documents/2026-lifevault
+
+rclone tree gdrive:2026-lifevault-published
+rclone cat gdrive:2026-lifevault-published/wins.md
+rclone cat gdrive:2026-lifevault-published/raw/2026/2026-04.jsonl
+```
+
+To check for a specific new win:
+
+```bash
+rclone cat gdrive:2026-lifevault-published/wins.md | grep -i "Red Baron"
+```
+
+If the Red Baron win appears in Google Drive, then the local log-to-Drive memory loop is working.
+
+# Claude web retrieval test
+
+After Cowork publish and WSL2 verification, Ralph should test Claude web with:
+
+```text
+Reference info on Google Drive. Tell me my wins for this week.
+```
+
+Expected behavior:
+
+Claude should discover/use the LifeVault working-memory files and include the Red Baron win if it is in the published weekly/wins data.
 
 ---
 
