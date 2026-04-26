@@ -51,123 +51,220 @@ You only write to archive/. You never modify inbox.
   the past 7 days.
 
 - "state of ralph" — update archive/derived/state-of-ralph.md.
-- "publish" — copy `inbox/<current-month>.md` to Google Drive.
+- "publish" — copy `inbox/<current-month>.md` to Google Drive using Ubuntu bash and rclone.
 
   Purpose:
-  Publish the current month inbox file to Google Drive with minimum tokens, no git interaction, and local Ubuntu-verifiable checks.
+  Publish the current month inbox file to Google Drive with no git interaction.
+  Ubuntu/rclone is the source of truth. Claude must use the same command-line path Ralph can verify.
 
-  Operating assumption:
-  Local shell examples are Ubuntu bash only. They are for local verification of filename, path, existence, byte count, and content. Google Drive actions must be done through the available Drive tool, not through local shell, unless an actual Drive CLI is installed and configured.
+  Required local setup:
+  `rclone` must have a Google Drive remote named `gdrive`.
 
-  Variables:
+  Claude Specific:
+  For this command, do not use Claude's Google Drive tool.
+  Use Ubuntu bash commands only.
+  Run the same commands shown below.
+  Do not invent helper functions.
+  Do not run git.
 
-  Human:
-  Current month filename is `YYYY-MM.md`.
+  1. Set current month filename.
 
-  Ubuntu:
-  `FILE_NAME="$(date +%Y-%m).md"`
-
-  Human:
-  Current inbox file is `inbox/YYYY-MM.md`.
-
-  Ubuntu:
-  `LOCAL_FILE="inbox/$FILE_NAME"`
-
-  Human:
-  Target Drive folder is `2026-lifevault-published`.
-
-  Ubuntu:
-  `PUBLISH_FOLDER="2026-lifevault-published"`
-
-  Procedure:
-
-  1. Human:
-     Determine the current month filename.
+     Human:
+     Current month filename is `YYYY-MM.md`.
 
      Ubuntu:
-     `FILE_NAME="$(date +%Y-%m).md"`
+     ```bash
+     FILE_NAME="$(date +%Y-%m).md"
+     echo "$FILE_NAME"
+     ```
 
-  2. Human:
-     Determine the local inbox file path.
+     Claude Specific:
+     Run the Ubuntu command exactly.
 
-     Ubuntu:
-     `LOCAL_FILE="inbox/$FILE_NAME"`
+  2. Set local inbox file path.
 
-  3. Human:
-     Confirm the local inbox file exists. If missing, stop and report the missing path.
-
-     Ubuntu:
-     `test -f "$LOCAL_FILE" && echo "exists: $LOCAL_FILE" || echo "missing: $LOCAL_FILE"`
-
-  4. Human:
-     Count the local file size in bytes.
+     Human:
+     Local file is `inbox/YYYY-MM.md`.
 
      Ubuntu:
-     `BYTES="$(wc -c < "$LOCAL_FILE" | tr -d ' ')" && echo "$BYTES"`
+     ```bash
+     LOCAL_FILE="inbox/$FILE_NAME"
+     echo "$LOCAL_FILE"
+     ```
 
-  5. Human:
-     Optionally preview the first few lines without modifying the file.
+     Claude Specific:
+     Run the Ubuntu command exactly.
+
+  3. Confirm local file exists.
+
+     Human:
+     If the local inbox file is missing, stop.
 
      Ubuntu:
-     `sed -n '1,20p' "$LOCAL_FILE"`
+     ```bash
+     test -f "$LOCAL_FILE" || { echo "missing: $LOCAL_FILE"; exit 1; }
+     echo "exists: $LOCAL_FILE"
+     ```
 
-  6. Human:
-     In Google Drive root, find folders matching all of these:
-     - name is `2026-lifevault-published`
-     - mimeType is Google Drive folder
-     - trashed is false
-     - parent is root
+     Claude Specific:
+     Run the Ubuntu command exactly. If missing, stop.
 
-     Drive action:
-     Use the Drive tool to list matching root folders.
+  4. Count local file bytes.
 
-  7. Human:
-     Choose the Drive folder:
-     - If zero folders exist, create `2026-lifevault-published` at Drive root.
-     - If one folder exists, use it.
-     - If multiple folders exist, use the oldest by createdTime.
-     - Do not delete duplicate folders.
-     - Do not create another folder when one already exists.
+     Human:
+     Get exact byte count.
 
-     Drive action:
-     Set chosen folder ID internally.
+     Ubuntu:
+     ```bash
+     BYTES="$(wc -c < "$LOCAL_FILE" | tr -d ' ')"
+     echo "$BYTES"
+     ```
 
-  8. Human:
-     In the chosen Drive folder, find all non-trashed files named `YYYY-MM.md`.
+     Claude Specific:
+     Run the Ubuntu command exactly.
 
-     Drive action:
-     List files in chosen folder where name equals the current month filename.
+  5. Confirm rclone remote exists.
 
-  9. Human:
-     Delete every matching Drive file. Verify each delete succeeded.
+     Human:
+     Verify the Google Drive remote named `gdrive` works.
 
-     Drive action:
-     Delete all matching files and count deletions.
+     Ubuntu:
+     ```bash
+     rclone lsd gdrive: >/dev/null
+     echo "rclone gdrive remote works"
+     ```
 
-  10. Human:
-      Create one new Drive file in the chosen folder:
-      - file name: current month filename
-      - content: exact contents of local file
+     Claude Specific:
+     Run the Ubuntu command exactly. If it fails, stop and report that `gdrive` remote is not configured.
 
-      Ubuntu local verification:
-      `cat "$LOCAL_FILE"`
+  6. Ensure publish folder exists.
 
-      Drive action:
-      Create the Drive file using the exact local file content.
+     Human:
+     Use the Drive root folder named `2026-lifevault-published`.
+     Create it only if missing.
+     Do not create another folder when it already exists.
 
-  11. Human:
-      Reply with exactly these lines:
+     Ubuntu:
+     ```bash
+     PUBLISH_FOLDER="2026-lifevault-published"
 
-      Folder: 2026-lifevault-published (used existing | created new)
-      Deleted: <N> existing copies
-      Created: <YYYY-MM.md> (<bytes> bytes)
+     if rclone lsjson --dirs-only gdrive: \
+       | jq -e --arg name "$PUBLISH_FOLDER" '.[] | select(.Name == $name)' >/dev/null; then
+       FOLDER_STATUS="used existing"
+     else
+       rclone mkdir "gdrive:$PUBLISH_FOLDER"
+       FOLDER_STATUS="created new"
+     fi
 
-  12. Human:
-      If duplicate folders were detected, append exactly this line:
+     echo "$FOLDER_STATUS"
+     ```
 
-      Note: <N> duplicate folders detected, used oldest. Clean up manually.
+     Claude Specific:
+     Run the Ubuntu command exactly.
+
+  7. Count existing published copies.
+
+     Human:
+     Count existing files in the publish folder with the current month filename.
+
+     Ubuntu:
+     ```bash
+     DELETE_COUNT="$(
+       rclone lsjson "gdrive:$PUBLISH_FOLDER" --files-only \
+         | jq --arg name "$FILE_NAME" '[.[] | select(.Name == $name)] | length'
+     )"
+
+     echo "$DELETE_COUNT"
+     ```
+
+     Claude Specific:
+     Run the Ubuntu command exactly.
+
+  8. Delete existing published copies.
+
+     Human:
+     Delete every existing file in the publish folder with the current month filename.
+
+     Ubuntu:
+     ```bash
+     rclone lsjson "gdrive:$PUBLISH_FOLDER" --files-only \
+       | jq -r --arg name "$FILE_NAME" '.[] | select(.Name == $name) | .Name' \
+       | while IFS= read -r MATCHED_FILE; do
+           rclone deletefile "gdrive:$PUBLISH_FOLDER/$MATCHED_FILE"
+         done
+     ```
+
+     Claude Specific:
+     Run the Ubuntu command exactly.
+
+  9. Verify old published copies are gone.
+
+     Human:
+     Confirm there are now zero existing files with the current month filename.
+
+     Ubuntu:
+     ```bash
+     REMAINING_COUNT="$(
+       rclone lsjson "gdrive:$PUBLISH_FOLDER" --files-only \
+         | jq --arg name "$FILE_NAME" '[.[] | select(.Name == $name)] | length'
+     )"
+
+     test "$REMAINING_COUNT" = "0" || { echo "delete failed: $REMAINING_COUNT copies remain"; exit 1; }
+     echo "deleted old copies"
+     ```
+
+     Claude Specific:
+     Run the Ubuntu command exactly. If any matching copies remain, stop.
+
+  10. Upload current inbox file.
+
+      Human:
+      Upload the local inbox file to the Drive publish folder.
+
+      Ubuntu:
+      ```bash
+      rclone copyto "$LOCAL_FILE" "gdrive:$PUBLISH_FOLDER/$FILE_NAME"
+      ```
+
+      Claude Specific:
+      Run the Ubuntu command exactly.
+
+  11. Verify uploaded file exists.
+
+      Human:
+      Confirm exactly one current-month file exists in the publish folder.
+
+      Ubuntu:
+      ```bash
+      CREATED_COUNT="$(
+        rclone lsjson "gdrive:$PUBLISH_FOLDER" --files-only \
+          | jq --arg name "$FILE_NAME" '[.[] | select(.Name == $name)] | length'
+      )"
+
+      test "$CREATED_COUNT" = "1" || { echo "upload verification failed: $CREATED_COUNT copies found"; exit 1; }
+      echo "uploaded: $FILE_NAME"
+      ```
+
+      Claude Specific:
+      Run the Ubuntu command exactly. If exactly one uploaded file is not found, stop.
+
+  12. Final reply.
+
+      Human:
+      Reply with only the publish result.
+
+      Ubuntu:
+      ```bash
+      echo "Folder: $PUBLISH_FOLDER ($FOLDER_STATUS)"
+      echo "Deleted: $DELETE_COUNT existing copies"
+      echo "Created: $FILE_NAME ($BYTES bytes)"
+      ```
+
+      Claude Specific:
+      Reply with exactly the three echoed lines.
 
   Forbidden:
+  - Do not use Claude's Google Drive tool for publish.
   - Do not run git.
   - Do not read git logs.
   - Do not run git status.
@@ -176,7 +273,6 @@ You only write to archive/. You never modify inbox.
   - Do not run git commit.
   - Do not run git push.
   - Do not modify anything in inbox/.
-  - Do not create another Drive folder if one already exists.
   - Do not ask questions.
 
 ## Context
